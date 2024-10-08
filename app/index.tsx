@@ -1,27 +1,148 @@
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, TextInput, FlatList, View, Text } from "react-native";
 import { ShoppingListItem } from "../components/shopping-list-item";
-import { Link } from "expo-router";
+import { theme } from "../theme";
+import { useEffect, useState } from "react";
+import { getFromStorage, saveToStorage } from "../utils/storage";
+import { STORAGE_KEY } from "../utils/constants";
+
+type ShoppingListItemType = {
+  id: string;
+  name: string;
+  completedAtTimestamp?: number;
+  lastUpdatedAtTimestamp: number;
+};
 
 export default function App() {
+  const [shoppingList, setShoppingList] = useState<ShoppingListItemType[]>([]);
+  const [value, setValue] = useState<string>();
+
+  useEffect(() => {
+    const fetchInitial = async () => {
+      const data = await getFromStorage(STORAGE_KEY);
+
+      if (data) setShoppingList(data);
+    };
+
+    fetchInitial();
+  }, []);
+
+  const handleSubmit = () => {
+    if (value) {
+      const newShoppingList = [
+        {
+          id: new Date().toISOString(),
+          name: value,
+          lastUpdatedAtTimestamp: Date.now(),
+        },
+        ...shoppingList,
+      ];
+      setShoppingList(newShoppingList);
+      saveToStorage(STORAGE_KEY, newShoppingList);
+      setValue(undefined);
+    }
+  };
+
+  const handleDelete = (id: string) => {
+    const newShoppingList = shoppingList.filter((item) => item.id !== id);
+
+    setShoppingList(newShoppingList);
+  };
+
+  const handleToggleComplete = (id: string) => {
+    const newShoppingList = shoppingList.map((item) => {
+      if (item.id === id) {
+        return {
+          ...item,
+          lastUpdatedAtTimestamp: Date.now(),
+          completedAtTimestamp: item.completedAtTimestamp
+            ? undefined
+            : Date.now(),
+        };
+      }
+      return item;
+    });
+
+    saveToStorage(STORAGE_KEY, newShoppingList);
+    setShoppingList(newShoppingList);
+  };
+
+  const sortShoppingList = (shoppingList: ShoppingListItemType[]) => {
+    return shoppingList.sort((a, b) => {
+      if (a.completedAtTimestamp && b.completedAtTimestamp) {
+        return b.completedAtTimestamp - a.completedAtTimestamp;
+      }
+
+      if (a.completedAtTimestamp && !b.completedAtTimestamp) {
+        return 1;
+      }
+
+      if (!a.completedAtTimestamp && b.completedAtTimestamp) {
+        return -1;
+      }
+
+      if (!a.completedAtTimestamp && !b.completedAtTimestamp) {
+        return b.lastUpdatedAtTimestamp - a.lastUpdatedAtTimestamp;
+      }
+
+      return 0;
+    });
+  };
+
   return (
-    <View style={styles.container}>
-      <Link
-        href="/counter"
-        style={{ textAlign: "center", marginBottom: 18, fontSize: 24 }}
-      >
-        Go to /counter
-      </Link>
-      <ShoppingListItem name="Coffee" />
-      <ShoppingListItem name="Tea" isCompleted />
-      <ShoppingListItem name="Sugar" isCompleted />
-    </View>
+    <FlatList
+      data={sortShoppingList(shoppingList)}
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+      ListHeaderComponent={
+        <TextInput
+          value={value}
+          style={styles.textInput}
+          onChangeText={setValue}
+          placeholder="e.g Coffee"
+          onSubmitEditing={handleSubmit}
+          returnKeyType="done"
+        />
+      }
+      ListEmptyComponent={
+        <View style={styles.listEmptyContainer}>
+          <Text>Your shopping list is empty</Text>
+        </View>
+      }
+      stickyHeaderIndices={[0]}
+      renderItem={({ item }) => (
+        <ShoppingListItem
+          name={item.name}
+          onDelete={() => handleDelete(item.id)}
+          onToggleComplete={() => handleToggleComplete(item.id)}
+          isCompleted={Boolean(item.completedAtTimestamp)}
+        />
+      )}
+    />
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: theme.colorWhite,
+    paddingVertical: 12,
+  },
+  contentContainer: {
+    paddingVertical: 12,
+  },
+  textInput: {
+    borderColor: theme.colorLightGrey,
+    borderWidth: 2,
+    padding: 12,
+    fontSize: 18,
+    borderRadius: 50,
+    marginHorizontal: 12,
+    marginBottom: 12,
+    backgroundColor: theme.colorWhite,
+  },
+  listEmptyContainer: {
     justifyContent: "center",
+    alignItems: "center",
+    marginVertical: 18,
   },
 });
